@@ -11,6 +11,7 @@ parser.add_argument('--source', type=str, required=True, help='original sentinel
 parser.add_argument('--output', type=str, required=True, help='image clips output path')
 parser.add_argument('--list', type=str, required=False, help='images list for deviding training and test' )
 parser.add_argument('--if_label', type=bool, required=False, default=False, help='if cutting labels')
+parser.add_argument('--organise_labels', type=bool, required=False, default=False, help='if you want to filter and organise the labels to only keep those with corresponding patches')
 args = parser.parse_args()
 
 
@@ -156,24 +157,38 @@ def remove_incompleted_bands_files(path):
 
     return intersection_list
 
+def try_make_directory(base_dir, new_dir):
+    dir_path = os.path.join(base_dir, new_dir)
+    if os.path.exists(dir_path):
+        print("Exist output path: {}".format(dir_path))
+        i = 1
+        while True:
+            dir_path = os.path.join(base_dir, '{}_{}'.format(new_dir, str(i)))
+            if not os.path.exists(dir_path):
+                os.makedirs(dir_path)
+                print("Create a new output dir: {}\n".format(dir_path))
+                break
+            else:
+                i += 1
+    else:
+        os.makedirs(dir_path)
+
+    return dir_path
 
 def process_labels():
     input_path = args.source
     save_clips_path = os.path.join(args.output,'output')
 
-    if os.path.exists(save_clips_path):
-        print("Exist output path: {}".format(save_clips_path))
-        i = 1
-        while True:
-            save_clips_path = os.path.join(args.output, 'output_{}'.format(str(i)))
-            if not os.path.exists(save_clips_path):
-                os.makedirs(save_clips_path)
-                print("Create a new output dir: {}\n".format(save_clips_path))
-                break
-            else:
-                i += 1
+    if args.organise_labels:       
+        if not os.path.exists(os.path.join(save_clips_path, 'train', '10m')) or not os.path.exists(os.path.join(save_clips_path, 'test', '10m')):
+            raise Exception(f"Missing train/test directory, make sure you have cut the image patches first, or don't specify `organise_labels`")
+
+        train_lbls_path = try_make_directory(os.path.join(save_clips_path, 'train'), 'labels')
+        test_lbls_path = try_make_directory(os.path.join(save_clips_path, 'test'), 'labels')
+        train_img_names = [os.path.basename(f) for f in glob(os.path.join(save_clips_path, 'train', '10m', '*.tif'))]
+        test_img_names = [os.path.basename(f) for f in glob(os.path.join(save_clips_path, 'test', '10m', '*.tif'))]
     else:
-        os.makedirs(save_clips_path)
+        save_clips_path = try_make_directory(args.output, 'output') 
     
     # Load labels
     labels_path = glob(os.path.join(args.source, "*.tif"))
@@ -201,12 +216,26 @@ def process_labels():
                 n=n+1
                 if label_name[-5:] == '_Mask':
                     label_name = label_name[:-5]
-                imgwrite(save_clips_path+"/"+label_name+'_'+str(n)+'.tif',label[high:high+window_size,width:width+window_size])
-        print("Generate {} clips for labels: {}".format(n,label_name))
 
-    print("\nCutting labels finished!\nOutput path: '{}'".format(save_clips_path))
+                label_name_ext = label_name+'_'+str(n)+'.tif'
 
-    
+                if args.organise_labels:
+                    if label_name_ext in train_img_names:
+                        save_clips_path = train_lbls_path
+                    elif label_name_ext in test_img_names:
+                        save_clips_path = test_lbls_path
+                    else:
+                        continue
+
+                # TEST HERE
+                imgwrite(os.path.join(save_clips_path, label_name_ext), label[high:high+window_size,width:width+window_size])
+        print("Generate {} clips for labels: {}".format(n, label_name))
+
+    if args.organise_labels:
+        print("\nCutting labels finished!\nTrain output path: '{}'".format(train_lbls_path))
+        print("Test output path: '{}'".format(test_lbls_path))
+    else:
+        print("\nCutting labels finished!\nOutput path: '{}'".format(save_clips_path))
 
 
 def process_dataset():
@@ -225,19 +254,8 @@ def process_dataset():
     # print("Get test_list:\n{}\n".format(test_list))
 
     # Create training and test dirs
-    save_clips_path = os.path.join(args.output,'output')
+    save_clips_path = try_make_directory(args.output,'output')
     
-    if os.path.exists(save_clips_path):
-        print("Exist output path: {}".format(save_clips_path))
-        i = 1
-        while True:
-            save_clips_path = os.path.join(args.output, 'output_{}'.format(str(i)))
-            if not os.path.exists(save_clips_path):
-                os.makedirs(save_clips_path)
-                print("Create a new output dir: {}\n".format(save_clips_path))
-                break
-            else:
-                i += 1
 
     if not os.path.exists(os.path.join(save_clips_path,'train')):
         os.makedirs(os.path.join(save_clips_path,'train','10m'))
