@@ -27,3 +27,6 @@ python dataset_preprocess.py --source 'dataset' --output './prepared_dataset' --
 
 ### Preprocess labels 
 python dataset_preprocess.py --source 'Mask' --output './prepared_dataset'  --if_label True
+
+### Preprocess labels and organise them into the train/test split, removing any non-matching files
+python dataset_preprocess.py --source 'Mask' --output './prepared_dataset'  --if_label True --organise_labels True
